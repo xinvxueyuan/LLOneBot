@@ -102,5 +102,28 @@ export function GroupMixin<T extends new (...args: any[]) => PMHQBase>(Base: T) 
       const oidbRespBody = Oidb.Base.decode(Buffer.from(res.pb, 'hex')).body
       return Oidb.FetchGroupsResp.decode(oidbRespBody)
     }
+
+    async getGroupFileList(groupCode: number, targetDirectory: string, startIndex: number, fileCount: number) {
+      const body = Oidb.GetGroupFileListReq.encode({
+        listReq: {
+          groupCode,
+          appId: 7,
+          targetDirectory,
+          fileCount,
+          sortBy: 1,
+          startIndex,
+          field17: 2,
+          field18: 0,
+        },
+      })
+      const data = Oidb.Base.encode({
+        command: 0x6d8,
+        subCommand: 1,
+        body,
+      })
+      const res = await this.httpSendPB('OidbSvcTrpcTcp.0x6d8_1', data)
+      const oidbRespBody = Oidb.Base.decode(Buffer.from(res.pb, 'hex')).body
+      return Oidb.GetGroupFileListResp.decode(oidbRespBody)
+    }
   }
 }

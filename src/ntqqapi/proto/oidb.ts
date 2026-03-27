@@ -294,4 +294,62 @@ export namespace Oidb {
       })
     }, 'repeated')
   })
+
+  /** OidbSvcTrpcTcp.0x6d8_1 */
+  export const GetGroupFileListReq = ProtoMessage.of({
+    listReq: ProtoField(2, {
+      groupCode: ProtoField(1, 'uint32'),
+      appId: ProtoField(2, 'uint32'),
+      targetDirectory: ProtoField(3, 'string'),
+      fileCount: ProtoField(5, 'uint32'),
+      sortBy: ProtoField(9, 'uint32'),
+      startIndex: ProtoField(13, 'uint32'),
+      field17: ProtoField(17, 'uint32'),
+      field18: ProtoField(18, 'uint32')
+    })
+  })
+
+  export const GetGroupFileListRespItem = ProtoMessage.of({
+    type: ProtoField(1, 'uint32'),
+    folderInfo: ProtoField(2, {
+      folderId: ProtoField(1, 'string'),
+      parentDirectoryId: ProtoField(2, 'string'),
+      folderName: ProtoField(3, 'string'),
+      createTime: ProtoField(4, 'uint32'),
+      modifiedTime: ProtoField(5, 'uint32'),
+      creatorUin: ProtoField(6, 'uint32'),
+      creatorName: ProtoField(7, 'string'),
+      totalFileCount: ProtoField(8, 'uint32')
+    }, 'optional'),
+    fileInfo: ProtoField(3, {
+      fileId: ProtoField(1, 'string'),
+      fileName: ProtoField(2, 'string'),
+      fileSize: ProtoField(3, 'uint32'),
+      busId: ProtoField(4, 'uint32'),
+      uploadedSize: ProtoField(5, 'uint32'),
+      uploadedTime: ProtoField(6, 'uint32'),
+      expireTime: ProtoField(7, 'uint32'),
+      modifiedTime: ProtoField(8, 'uint32'),
+      downloadedTimes: ProtoField(9, 'uint32'),
+      fileSha1: ProtoField(10, 'bytes'),
+      fileMd5: ProtoField(12, 'bytes'),
+      uploaderName: ProtoField(14, 'string'),
+      uploaderUin: ProtoField(15, 'uint32'),
+      parentDirectory: ProtoField(16, 'string'),
+      field17: ProtoField(17, 'uint32'),
+      field22: ProtoField(22, 'string')
+    }, 'optional')
+  })
+
+  export const GetGroupFileListResp = ProtoMessage.of({
+    listResp: ProtoField(2, {
+      retCode: ProtoField(1, 'int32'),
+      retMsg: ProtoField(2, 'string'),
+      clientWording: ProtoField(3, 'string'),
+      isEnd: ProtoField(4, 'bool'),
+      items: ProtoField(5, GetGroupFileListRespItem, 'repeated'),
+      allFileCount: ProtoField(7, 'uint32'),
+      nextIndex: ProtoField(13, 'uint32')
+    })
+  })
 }

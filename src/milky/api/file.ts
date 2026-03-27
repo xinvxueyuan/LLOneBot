@@ -103,37 +103,23 @@ const GetGroupFiles = defineApi(
   async (ctx, payload) => {
     const allFiles: GroupFileEntity[] = []
     const allFolders: GroupFolderEntity[] = []
-    let startIndex = 0
-    let isEnd = false
 
-    // Fetch all pages until isEnd is true
-    while (!isEnd) {
-      const fileListParam = {
-        sortType: 1,
-        fileCount: 100,
-        startIndex: startIndex,
-        sortOrder: 2,
-        showOnlinedocFolder: 0,
-        folderId: payload.parent_folder_id
+    let nextIndex: number | undefined
+    while (nextIndex !== 0) {
+      const data = await ctx.app.pmhq.getGroupFileList(payload.group_id, payload.parent_folder_id, nextIndex ?? 0, 100)
+      if (data.listResp.retCode !== 0) {
+        if (data.listResp.retCode === -3) {
+          throw new Error('你没有加入该群聊')
+        } else {
+          throw new Error(data.listResp.clientWording)
+        }
       }
 
-      const data = await ctx.ntGroupApi.getGroupFileList(
-        payload.group_id.toString(),
-        fileListParam
-      )
-
-      const { files, folders } = transformGroupFileList(data)
-
+      const { files, folders } = transformGroupFileList(data.listResp.items, payload.group_id)
       allFiles.push(...files)
       allFolders.push(...folders)
 
-      // Check if we've reached the end
-      isEnd = data.isEnd
-
-      // Update startIndex for next iteration
-      if (!isEnd) {
-        startIndex = data.nextIndex
-      }
+      nextIndex = data.listResp.nextIndex
     }
 
     return Ok({ files: allFiles, folders: allFolders })

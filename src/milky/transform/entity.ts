@@ -1,6 +1,8 @@
 import { FriendEntity, GroupEntity, GroupFileEntity, GroupFolderEntity, GroupMemberEntity } from '@saltify/milky-types'
 import { CategoryFriend, GroupDetailInfo, Sex, SimpleInfo } from '@/ntqqapi/types'
-import { GroupMember, GroupFileInfo } from '@/ntqqapi/types'
+import { GroupMember } from '@/ntqqapi/types'
+import { InferProtoModel } from '@saltify/typeproto'
+import { Oidb } from '@/ntqqapi/proto'
 
 export function transformGender(gender: Sex): 'male' | 'female' | 'unknown' {
   if (gender === Sex.Male) return 'male'
@@ -58,40 +60,36 @@ export function transformGroupMember(member: GroupMember, groupId: number): Grou
   }
 }
 
-export function transformGroupFileList(data: GroupFileInfo): {
+export function transformGroupFileList(items: InferProtoModel<typeof Oidb.GetGroupFileListRespItem>[], groupId: number): {
   files: GroupFileEntity[],
   folders: GroupFolderEntity[]
 } {
   const files: GroupFileEntity[] = []
   const folders: GroupFolderEntity[] = []
 
-  if (data.item.length === 0) {
-    return { files, folders }
-  }
-
-  for (const item of data.item) {
+  for (const item of items) {
     if (item.folderInfo) {
       folders.push({
-        group_id: +item.peerId,
+        group_id: groupId,
         folder_id: item.folderInfo.folderId,
-        parent_folder_id: item.folderInfo.parentFolderId,
+        parent_folder_id: item.folderInfo.parentDirectoryId,
         folder_name: item.folderInfo.folderName,
         created_time: item.folderInfo.createTime,
-        last_modified_time: item.folderInfo.modifyTime,
-        creator_id: +item.folderInfo.createUin,
+        last_modified_time: item.folderInfo.modifiedTime,
+        creator_id: item.folderInfo.creatorUin,
         file_count: item.folderInfo.totalFileCount,
       })
     } else if (item.fileInfo) {
       files.push({
-        group_id: +item.peerId,
+        group_id: groupId,
         file_id: item.fileInfo.fileId,
         file_name: item.fileInfo.fileName,
-        parent_folder_id: item.fileInfo.parentFolderId,
-        file_size: +item.fileInfo.fileSize,
-        uploaded_time: item.fileInfo.uploadTime,
-        expire_time: item.fileInfo.deadTime || undefined,
-        uploader_id: +item.fileInfo.uploaderUin,
-        downloaded_times: item.fileInfo.downloadTimes,
+        parent_folder_id: item.fileInfo.parentDirectory,
+        file_size: item.fileInfo.fileSize,
+        uploaded_time: item.fileInfo.uploadedTime,
+        expire_time: item.fileInfo.expireTime || undefined,
+        uploader_id: item.fileInfo.uploaderUin,
+        downloaded_times: item.fileInfo.downloadedTimes,
       })
     }
   }
