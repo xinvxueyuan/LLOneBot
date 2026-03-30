@@ -10,7 +10,8 @@
     "jsx": "react",
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "bundler",
-    "module": "esnext"
+    "module": "esnext",
+    "noEmit": true
   },
   "include": ["./**/*", "../../**/*"],
   "exclude": ["node_modules"]
