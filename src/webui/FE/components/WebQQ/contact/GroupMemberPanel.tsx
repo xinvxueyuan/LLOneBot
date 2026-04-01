@@ -1,23 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { X, Search, Crown, Shield, Loader2, AtSign, Hand, User } from 'lucide-react'
+import { X, Search, Crown, Shield, Loader2 } from 'lucide-react'
 import type { GroupMemberItem } from '../../../types/webqq'
-import { filterMembers, sendPoke, getUserProfile, UserProfile } from '../../../utils/webqqApi'
+import { filterMembers, sendPoke, getUserProfile, UserProfile, getSelfUid, kickGroupMember, muteGroupMember, setMemberTitle } from '../../../utils/webqqApi'
 import { useWebQQStore, hasVisitedChat, hasFetchedMembers, markMembersFetched } from '../../../stores/webqqStore'
 import { showToast } from '../../common'
 import { UserProfileCard } from '../profile'
+import { AvatarContextMenu } from '../chat/ContextMenus'
+import { MuteDialog, KickConfirmDialog, TitleDialog } from '../chat/ChatDialogs'
 
 interface GroupMemberPanelProps {
   groupCode: string
   onClose: () => void
   onAtMember?: (member: { uid: string; uin: string; name: string }) => void
-}
-
-interface MemberContextMenuInfo {
-  x: number
-  y: number
-  member: GroupMemberItem
 }
 
 interface MemberListItemProps {
@@ -57,23 +52,36 @@ const MemberListItem: React.FC<MemberListItemProps> = ({ member, onContextMenu, 
   )
 }
 
+interface AvatarMenuInfo {
+  x: number
+  y: number
+  senderUid: string
+  senderUin: string
+  senderName: string
+  chatType: number
+  groupCode: string
+}
+
 const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({ groupCode, onClose, onAtMember }) => {
   const [members, setMembers] = useState<GroupMemberItem[]>([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<MemberContextMenuInfo | null>(null)
+  const [avatarContextMenu, setAvatarContextMenu] = useState<AvatarMenuInfo | null>(null)
   const [userProfile, setUserProfile] = useState<{ profile: UserProfile | null; loading: boolean; position: { x: number; y: number } } | null>(null)
-  
-  const { getCachedMembers, fetchGroupMembers } = useWebQQStore()
-  
+  const [muteDialog, setMuteDialog] = useState<{ uid: string; name: string } | null>(null)
+  const [kickConfirm, setKickConfirm] = useState<{ uid: string; name: string } | null>(null)
+  const [titleDialog, setTitleDialog] = useState<{ uid: string; name: string } | null>(null)
+
+  const { getCachedMembers, fetchGroupMembers, currentChat } = useWebQQStore()
+
   // 虚拟列表容器 ref
   const listContainerRef = useRef<HTMLDivElement>(null)
-  
+
   // 用 ref 跟踪当前 groupCode，用于异步回调检查
   const currentGroupCodeRef = useRef(groupCode)
   useEffect(() => { currentGroupCodeRef.current = groupCode }, [groupCode])
-  
+
   // 用 ref 存储函数避免依赖变化
   const getCachedMembersRef = useRef(getCachedMembers)
   getCachedMembersRef.current = getCachedMembers
@@ -84,20 +92,20 @@ const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({ groupCode, onClose,
   // 加载群成员 - 只依赖 groupCode
   useEffect(() => {
     const targetGroupCode = groupCode
-    
+
     // 检查是否首次进入该聊天 且 该群成员还没拉取过
     const isFirstVisit = !hasVisitedChat(2, targetGroupCode)
     const alreadyFetched = hasFetchedMembers(targetGroupCode)
-    
+
     console.log('[GroupMemberPanel] useEffect triggered:', { groupCode: targetGroupCode, isFirstVisit, alreadyFetched })
-    
+
     // 先检查缓存（同步）- 有缓存就先显示
     const cached = getCachedMembersRef.current(targetGroupCode)
     if (cached) {
       console.log('[GroupMemberPanel] Cache hit:', cached.length, 'members')
       setMembers(cached)
       setError(null)
-      
+
       // 如果已经拉取过，直接使用缓存
       if (alreadyFetched) {
         setLoading(false)
@@ -105,19 +113,19 @@ const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({ groupCode, onClose,
       }
       // 首次访问且未拉取过：显示缓存但继续后台刷新
     }
-    
+
     // 如果已经拉取过，不再请求
     if (alreadyFetched) {
       setLoading(false)
       return
     }
-    
+
     // 防止重复加载
     if (isLoadingRef.current) {
       console.log('[GroupMemberPanel] Already loading, skip')
       return
     }
-    
+
     // 需要加载
     console.log('[GroupMemberPanel] Fetching from API, isFirstVisit:', isFirstVisit)
     isLoadingRef.current = true
@@ -127,7 +135,7 @@ const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({ groupCode, onClose,
       setError(null)
       setMembers([])
     }
-    
+
     fetchGroupMembersRef.current(targetGroupCode, isFirstVisit)
       .then(data => {
         console.log('[GroupMemberPanel] API success:', data.length, 'members, currentGroupCode:', currentGroupCodeRef.current)
@@ -154,7 +162,7 @@ const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({ groupCode, onClose,
           isLoadingRef.current = false
         }
       })
-    
+
     // 清理函数：切换群时重置加载状态
     return () => {
       console.log('[GroupMemberPanel] Cleanup, reset isLoading')
@@ -181,46 +189,28 @@ const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({ groupCode, onClose,
   const handleContextMenu = useCallback((e: React.MouseEvent, member: GroupMemberItem) => {
     e.preventDefault()
     e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY, member })
-  }, [])
+    setAvatarContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      senderUid: member.uid,
+      senderUin: member.uin,
+      senderName: member.card || member.nickname,
+      chatType: 2,
+      groupCode,
+    })
+  }, [groupCode])
 
-  const handleAtMember = useCallback(() => {
-    if (contextMenu && onAtMember) {
-      const member = contextMenu.member
-      onAtMember({
-        uid: member.uid,
-        uin: member.uin,
-        name: member.card || member.nickname
-      })
-    }
-    setContextMenu(null)
-  }, [contextMenu, onAtMember])
-
-  const handlePoke = useCallback(async () => {
-    if (!contextMenu) return
-    const member = contextMenu.member
-    setContextMenu(null)
-    try {
-      await sendPoke(2, Number(member.uin), Number(groupCode))
-    } catch (e: any) {
-      showToast(e.message || '戳一戳失败', 'error')
-    }
-  }, [contextMenu, groupCode])
-
-  const handleViewProfile = useCallback(async () => {
-    if (!contextMenu) return
-    const member = contextMenu.member
-    const pos = { x: contextMenu.x, y: contextMenu.y }
-    setContextMenu(null)
+  const handleShowProfile = useCallback(async (uid: string, uin: string, x: number, y: number, gCode?: string) => {
+    const pos = { x, y }
     setUserProfile({ profile: null, loading: true, position: pos })
     try {
-      const profile = await getUserProfile(member.uid, member.uin, groupCode)
+      const profile = await getUserProfile(uid, uin, gCode)
       setUserProfile({ profile, loading: false, position: pos })
     } catch (e: any) {
       showToast(e.message || '获取资料失败', 'error')
       setUserProfile(null)
     }
-  }, [contextMenu, groupCode])
+  }, [])
 
   return (
     <div className="flex flex-col h-full">
@@ -273,31 +263,85 @@ const GroupMemberPanel: React.FC<GroupMemberPanelProps> = ({ groupCode, onClose,
         )}
       </div>
 
-      {contextMenu && createPortal(
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null) }} />
-          <div className="fixed z-50 bg-popup backdrop-blur-sm border border-theme-divider rounded-lg shadow-lg py-1 min-w-[120px]" style={{ left: contextMenu.x, top: Math.min(contextMenu.y, window.innerHeight - 150) }} onContextMenu={(e) => e.preventDefault()}>
-            {onAtMember && (
-              <button onClick={handleAtMember} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-theme hover:bg-theme-item-hover transition-colors">
-                <AtSign size={14} />
-                @ta
-              </button>
-            )}
-            <button onClick={handlePoke} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-theme hover:bg-theme-item-hover transition-colors">
-              <Hand size={14} />
-              戳一戳
-            </button>
-            <button onClick={handleViewProfile} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-theme hover:bg-theme-item-hover transition-colors">
-              <User size={14} />
-              查看资料
-            </button>
-          </div>
-        </>,
-        document.body
+      {/* 复用 AvatarContextMenu，与聊天窗口头像右键菜单一致 */}
+      {avatarContextMenu && (
+        <AvatarContextMenu
+          avatarContextMenu={avatarContextMenu}
+          getCachedMembers={getCachedMembers}
+          onClose={() => setAvatarContextMenu(null)}
+          onInsertAt={(uid, uin, name) => {
+            onAtMember?.({ uid, uin, name })
+          }}
+          onShowProfile={handleShowProfile}
+          onSetTitle={(uid, name) => setTitleDialog({ uid, name })}
+          onMute={(uid, name) => setMuteDialog({ uid, name })}
+          onKick={(uid, name) => setKickConfirm({ uid, name })}
+          onAdminChanged={() => fetchGroupMembers(groupCode, true)}
+          groupName={currentChat?.peerName}
+        />
       )}
 
       {userProfile && (
         <UserProfileCard profile={userProfile.profile} loading={userProfile.loading} position={userProfile.position} onClose={() => setUserProfile(null)} />
+      )}
+
+      {muteDialog && (
+        <MuteDialog
+          name={muteDialog.name}
+          onMute={async (seconds) => {
+            const { uid, name } = muteDialog
+            setMuteDialog(null)
+            try {
+              await muteGroupMember(groupCode, uid, seconds)
+              if (seconds === 0) {
+                showToast(`已解除 ${name} 的禁言`, 'success')
+              } else {
+                const display = seconds >= 86400 ? `${Math.floor(seconds / 86400)}天` :
+                  seconds >= 3600 ? `${Math.floor(seconds / 3600)}小时` :
+                  seconds >= 60 ? `${Math.floor(seconds / 60)}分钟` : `${seconds}秒`
+                showToast(`已禁言 ${name} ${display}`, 'success')
+              }
+            } catch (e: any) {
+              showToast(e.message || '禁言失败', 'error')
+            }
+          }}
+          onClose={() => setMuteDialog(null)}
+        />
+      )}
+
+      {kickConfirm && (
+        <KickConfirmDialog
+          name={kickConfirm.name}
+          groupName={currentChat?.peerName || groupCode}
+          onConfirm={async () => {
+            const { uid, name } = kickConfirm
+            setKickConfirm(null)
+            try {
+              await kickGroupMember(groupCode, uid)
+              showToast(`已将 ${name} 移出群聊`, 'success')
+            } catch (e: any) {
+              showToast(e.message || '踢出失败', 'error')
+            }
+          }}
+          onClose={() => setKickConfirm(null)}
+        />
+      )}
+
+      {titleDialog && (
+        <TitleDialog
+          name={titleDialog.name}
+          onConfirm={async (title) => {
+            const { uid, name } = titleDialog
+            setTitleDialog(null)
+            try {
+              await setMemberTitle(groupCode, uid, title)
+              showToast(title ? `已设置 ${name} 的头衔为「${title}」` : `已清除 ${name} 的头衔`, 'success')
+            } catch (e: any) {
+              showToast(e.message || '设置头衔失败', 'error')
+            }
+          }}
+          onClose={() => setTitleDialog(null)}
+        />
       )}
     </div>
   )
