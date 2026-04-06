@@ -37,6 +37,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { sleep } from '@/common/utils'
 import { ChatType } from '@/ntqqapi/types'
+import { noop } from 'cosmokit'
 
 const GetLoginInfo = defineApi(
   'get_login_info',
@@ -109,7 +110,7 @@ const GetFriendList = defineApi(
   'get_friend_list',
   GetFriendListInput,
   GetFriendListOutput,
-  async (ctx, payload) => {
+  async (ctx) => {
     const friends = await ctx.ntFriendApi.getBuddyList()
     const category: Map<number, {
       categoryId: number
@@ -154,7 +155,7 @@ const GetGroupList = defineApi(
   'get_group_list',
   GetGroupListInput,
   GetGroupListOutput,
-  async (ctx, payload) => {
+  async (ctx) => {
     const { groups } = await ctx.app.pmhq.fetchGroups()
     return Ok({
       groups: groups.map(e => {
@@ -253,7 +254,7 @@ const GetPeerPins = defineApi(
   'get_peer_pins',
   z.object({}),
   GetPeerPinsOutput,
-  async (ctx, payload) => {
+  async (ctx) => {
     const friends = await ctx.ntFriendApi.getBuddyList()
     const category: Map<number, {
       categoryId: number
@@ -331,7 +332,7 @@ const SetAvatar = defineApi(
     const tempPath = path.join(TEMP_DIR, `avatar-${randomUUID()}`)
     await writeFile(tempPath, data)
     const result = await ctx.ntUserApi.setSelfAvatar(tempPath)
-    unlink(tempPath).catch(e => { })
+    unlink(tempPath).catch(noop)
     if (result.result !== 0) {
       return Failed(-500, result.errMsg)
     }
@@ -401,7 +402,7 @@ const GetCustomFaceUrlList = defineApi(
   'get_custom_face_url_list',
   z.object({}),
   GetCustomFaceUrlListOutput,
-  async (ctx, payload) => {
+  async (ctx) => {
     const result = await ctx.ntMsgApi.fetchFavEmojiList(200)
     if (result.result !== 0) {
       return Failed(-500, result.errMsg)
@@ -438,7 +439,7 @@ const GetCSRFToken = defineApi(
   'get_csrf_token',
   z.object({}),
   GetCSRFTokenOutput,
-  async (ctx, payload) => {
+  async (ctx) => {
     const cookiesObject = await ctx.ntUserApi.getCookies('h5.qzone.qq.com')
     const csrfToken = ctx.ntWebApi.genBkn(cookiesObject.skey)
     return Ok({ csrf_token: csrfToken })

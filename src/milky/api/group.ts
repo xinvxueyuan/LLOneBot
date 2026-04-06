@@ -33,6 +33,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { GroupNotifyStatus, GroupNotifyType } from '@/ntqqapi/types'
 import { transformIncomingSegments } from '../transform/message'
+import { noop } from 'cosmokit'
 
 const SetGroupName = defineApi(
   'set_group_name',
@@ -56,7 +57,7 @@ const SetGroupAvatar = defineApi(
     const tempPath = path.join(TEMP_DIR, `group-avatar-${randomUUID()}`)
     await writeFile(tempPath, imageBuffer)
     const result = await ctx.ntGroupApi.setGroupAvatar(payload.group_id.toString(), tempPath)
-    unlink(tempPath).catch(e => { })
+    unlink(tempPath).catch(noop)
     if (result.result !== 0) {
       return Failed(-500, result.errMsg)
     }
@@ -201,7 +202,7 @@ const SendGroupAnnouncement = defineApi(
       const tempPath = path.join(TEMP_DIR, `group-announcement-${randomUUID()}`)
       await writeFile(tempPath, imageBuffer)
       const result = await ctx.ntGroupApi.uploadGroupBulletinPic(groupCode, tempPath)
-      unlink(tempPath).catch(e => { })
+      unlink(tempPath).catch(noop)
       if (result.errCode !== 0) {
         return Failed(-500, result.errMsg)
       }
@@ -395,7 +396,7 @@ const GetGroupNotifications = defineApi(
     for (const notify of notifies) {
       if (notify.type === GroupNotifyType.RequestJoinNeedAdminiStratorPass) {
         notifications.push({
-          type: 'join_request',
+          type: 'join_request' as const,
           group_id: Number(notify.group.groupCode),
           notification_seq: Number(notify.seq),
           is_filtered: result.doubt,
@@ -416,7 +417,7 @@ const GetGroupNotifications = defineApi(
         GroupNotifyType.CancelAdminNotifyAdmin,
       ].includes(notify.type)) {
         notifications.push({
-          type: 'admin_change',
+          type: 'admin_change' as const,
           group_id: Number(notify.group.groupCode),
           notification_seq: Number(notify.seq),
           target_user_id: Number(await ctx.ntUserApi.getUinByUid(notify.user1.uid)),
@@ -425,7 +426,7 @@ const GetGroupNotifications = defineApi(
         })
       } else if (notify.type === GroupNotifyType.KickMemberNotifyAdmin) {
         notifications.push({
-          type: 'kick',
+          type: 'kick' as const,
           group_id: Number(notify.group.groupCode),
           notification_seq: Number(notify.seq),
           target_user_id: Number(await ctx.ntUserApi.getUinByUid(notify.user1.uid)),
@@ -433,14 +434,14 @@ const GetGroupNotifications = defineApi(
         })
       } else if (notify.type === GroupNotifyType.MemberLeaveNotifyAdmin) {
         notifications.push({
-          type: 'quit',
+          type: 'quit' as const,
           group_id: Number(notify.group.groupCode),
           notification_seq: Number(notify.seq),
           target_user_id: Number(await ctx.ntUserApi.getUinByUid(notify.user1.uid))
         })
       } else if (notify.type === GroupNotifyType.InvitedNeedAdminiStratorPass) {
         notifications.push({
-          type: 'invited_join_request',
+          type: 'invited_join_request' as const,
           group_id: Number(notify.group.groupCode),
           notification_seq: Number(notify.seq),
           initiator_id: Number(await ctx.ntUserApi.getUinByUid(notify.user2.uid)),

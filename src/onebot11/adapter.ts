@@ -44,6 +44,7 @@ import { cloneObj } from '@/common/utils'
 import { OB11GroupMsgEmojiLikeEvent } from './event/notice/OB11MsgEmojiLikeEvent'
 import { GroupEssenceEvent } from './event/notice/OB11GroupEssenceEvent'
 import { OB11GroupCardEvent } from './event/notice/OB11GroupCardEvent'
+import { noop } from 'cosmokit'
 
 declare module 'cordis' {
   interface Context {
@@ -325,8 +326,7 @@ class OneBot11Adapter extends Service {
       }
     }
     this.ctx.on('llob/config-updated', input => {
-      this.handleConfigUpdated(input).catch(e => {
-      })
+      this.handleConfigUpdated(input).catch(noop)
     })
     this.ctx.on('nt/message-created', (input: RawMessage) => {
       // 其他终端自己发送的消息会进入这里
@@ -445,7 +445,6 @@ class OneBot11Adapter extends Service {
             input.info.name,
             input.info.shareInfo.shareLink,
             input.info.fileSetId,
-            files,
           )
           this.dispatch(event)
         }).catch((err) => {
@@ -581,7 +580,7 @@ class OneBot11Adapter extends Service {
                 messageId,
                 [{
                   emoji_id: info.code,
-                  count: 1,
+                  count: info.count,
                 }],
                 info.actionType === 1
               )

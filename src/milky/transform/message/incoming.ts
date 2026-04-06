@@ -105,7 +105,7 @@ export async function transformIncomingSegments(ctx: Context, message: RawMessag
             message_seq: +element.replyElement!.replayMsgSeq,
             sender_id: +element.replyElement!.senderUid,
             time: +element.replyElement!.replyMsgTime,
-            segments: await transformIncomingSegments(ctx, message.records[0])
+            segments: message.records[0] ? await transformIncomingSegments(ctx, message.records[0]) : []
           },
         })
         break
@@ -191,15 +191,30 @@ export async function transformIncomingSegments(ctx: Context, message: RawMessag
         })
         break
 
-      case ElementType.Ark:
-        segments.push({
-          type: 'light_app',
-          data: {
-            app_name: JSON.parse(element.arkElement!.bytesData).app,
-            json_payload: element.arkElement!.bytesData,
-          },
-        })
+      case ElementType.Ark: {
+        const { arkElement } = element
+        const data = JSON.parse(arkElement!.bytesData)
+        if (data.app === 'com.tencent.multimsg' && data.meta.detail.resid) {
+          segments.push({
+            type: 'forward',
+            data: {
+              forward_id: data.meta.detail.resid,
+              title: data.meta.detail.source,
+              preview: data.meta.detail.news.map((item: { text: string }) => item.text),
+              summary: data.meta.detail.summary,
+            },
+          })
+        } else {
+          segments.push({
+            type: 'light_app',
+            data: {
+              app_name: data.app,
+              json_payload: arkElement!.bytesData,
+            },
+          })
+        }
         break
+      }
     }
   }
 

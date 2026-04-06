@@ -148,7 +148,7 @@ export function invoke<
   else {
     funcName = method
   }
-  let timeout = options.timeout ?? 15000
+  const timeout = options.timeout ?? 15000
 
   return new Promise<R>((resolve, reject) => {
     let timeoutId = null
@@ -166,14 +166,16 @@ export function invoke<
       }, timeout)
     }
     if (options.resultCmd) {
-      let firstResult: any = undefined
+      let firstResult: unknown = undefined
       hookId = registerReceiveHook<R>(options.resultCmd as string, (data: R) => {
         if (options.resultCb && !options.resultCb(data, firstResult)) {
           return
         }
         resolve(data)
         removeReceiveHook(hookId)
-        timeoutId && clearTimeout(timeoutId)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
       })
       pmhq.call(funcName, args, timeout).then(r => {
         firstResult = r
@@ -192,14 +194,18 @@ export function invoke<
           })
           reject(new DetailedError(`invoke failed, ${funcName}, ${displayReq}, ${displayRes}`, r))
           removeReceiveHook(hookId)
-          timeoutId && clearTimeout(timeoutId)
+          if (timeoutId) {
+            clearTimeout(timeoutId)
+          }
         }
       }).catch(reject)
     }
     else {
       pmhq.call(funcName, args, timeout).then(r => {
         resolve(r)
-        timeoutId && clearTimeout(timeoutId)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
       }).catch(reject)
     }
   })

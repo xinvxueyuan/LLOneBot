@@ -527,7 +527,7 @@ export const useWebQQStore = create<WebQQState>()(
             }
           })
           set({ unreadCounts: newUnread })
-        } catch (e: any) {
+        } catch (e) {
           set({
             contactsError: e.message || '加载联系人失败',
             contactsLoading: false
@@ -754,7 +754,7 @@ export const useWebQQStore = create<WebQQState>()(
             })
             return { recentChats: chats }
           })
-        } catch (error: any) {
+        } catch (error) {
           console.error('设置置顶失败:', error)
           throw error
         }
