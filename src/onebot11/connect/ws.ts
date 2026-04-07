@@ -282,7 +282,7 @@ class OB11WebSocketReverse {
     } catch (e) {
       return this.reply(this.wsClient!, OB11Response.error(`JSON 解析失败: ${(e as Error).message}`, 1400, receive.echo))
     }
-    const action = this.config.actionMap.get(receive.action!)!
+    const action = this.config.actionMap.get(receive.action!)
     if (!action) {
       return this.reply(this.wsClient!, OB11Response.error(`${receive.action} API 不存在`, 1404, receive.echo))
     }
