@@ -13,6 +13,7 @@ export class RkeyManager {
     private_rkey: '',
     expired_time: 0
   }
+  private pull?: Promise<void>
 
   constructor(protected ctx: Context, serverUrl: string) {
     this.serverUrl = serverUrl
@@ -35,6 +36,11 @@ export class RkeyManager {
   }
 
   async refreshRkey() {
+    if (this.pull) {
+      return this.pull
+    }
+    const { promise, resolve } = Promise.withResolvers<void>()
+    this.pull = promise
     try {
       const { privateRKey, groupRKey, expiredTime } = await this.ctx.pmhq.getRKey()
       this.rkeyData = {
@@ -42,15 +48,15 @@ export class RkeyManager {
         group_rkey: groupRKey,
         expired_time: expiredTime
       }
+      resolve()
+      this.pull = undefined
       this.ctx.logger.info(`发包获取rkey成功, private:${privateRKey}, group:${groupRKey}`)
     }
     catch (e) {
       this.ctx.logger.warn(`发包获取rkey失败 ${e}，开始获取远程rkey`)
-      try {
-        this.rkeyData = await this.fetchServerRkey()
-      } catch (e) {
-        this.ctx.logger.error('获取远程rkey失败', e)
-      }
+      this.rkeyData = await this.fetchServerRkey()
+      resolve()
+      this.pull = undefined
     }
   }
 
