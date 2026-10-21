@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTestApp } from '../helpers/testApp'
 import { createMockContext } from '../helpers/mockContext'
 import { createConfigRoutes } from '@/webui/BE/routes/config'
+import { legacyHashPassword, verifyPassword } from '@/webui/BE/passwordHash'
 
 vi.mock('@/main/config', () => ({
   webuiTokenUtil: {
@@ -60,7 +61,10 @@ describe('config routes', () => {
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.success).toBe(true)
-      expect(vi.mocked(webuiTokenUtil.setToken)).toHaveBeenCalledWith('new-password')
+      const [verifier] = vi.mocked(webuiTokenUtil.setToken).mock.calls[0]
+      expect(verifier).toMatch(/^scrypt\$16384\$8\$1\$/)
+      expect(await verifyPassword(legacyHashPassword('new-password'), verifier)).toBe(true)
+      expect(verifier).not.toBe(legacyHashPassword('new-password'))
     })
   })
 

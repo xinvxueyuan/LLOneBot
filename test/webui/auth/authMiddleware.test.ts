@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Hono } from 'hono'
-import { hashPassword } from '@/webui/BE/passwordHash'
+import { hashPassword, legacyHashPassword } from '@/webui/BE/passwordHash'
 
 vi.mock('@/main/config', () => ({
   webuiTokenUtil: {
@@ -89,7 +89,7 @@ describe('authMiddleware', () => {
       app.get('/test', (c) => c.json({ ok: true }))
 
       const res = await app.request('/test', {
-        headers: { 'X-Webui-Token': hashPassword(TOKEN) },
+        headers: { 'X-Webui-Token': legacyHashPassword(TOKEN) },
       })
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -101,10 +101,76 @@ describe('authMiddleware', () => {
       app.use('*', authMiddleware)
       app.get('/test', (c) => c.json({ ok: true }))
 
-      const res = await app.request(`/test?token=${hashPassword(TOKEN)}`)
+      const res = await app.request(`/test?token=${legacyHashPassword(TOKEN)}`)
       expect(res.status).toBe(200)
       const body = await res.json()
       expect(body.ok).toBe(true)
+    })
+
+    it('migrates a successful legacy login exactly once', async () => {
+      const app = createAuthApp()
+      app.use('*', authMiddleware)
+      app.get('/test', (c) => c.json({ ok: true }))
+
+      const res = await app.request('/test', {
+        headers: { 'X-Webui-Token': legacyHashPassword(TOKEN) },
+      })
+
+      expect(res.status).toBe(200)
+      expect(webuiTokenUtil.setToken).toHaveBeenCalledTimes(1)
+      expect(webuiTokenUtil.setToken).toHaveBeenCalledWith(expect.stringMatching(/^scrypt\$16384\$8\$1\$/))
+    })
+
+    it('does not migrate a failed legacy login', async () => {
+      const app = createAuthApp()
+      app.use('*', authMiddleware)
+      app.get('/test', (c) => c.json({ ok: true }))
+
+      const res = await app.request('/test', { headers: { 'X-Webui-Token': 'wrong-token' } })
+
+      expect(res.status).toBe(403)
+      expect(webuiTokenUtil.setToken).not.toHaveBeenCalled()
+    })
+
+    it('accepts a legacy plaintext password beginning with scrypt$', async () => {
+      vi.mocked(webuiTokenUtil.getToken).mockReturnValue('scrypt$legacy-password')
+      const app = createAuthApp()
+      app.use('*', authMiddleware)
+      app.get('/test', (c) => c.json({ ok: true }))
+
+      const res = await app.request('/test', {
+        headers: { 'X-Webui-Token': legacyHashPassword('scrypt$legacy-password') },
+      })
+
+      expect(res.status).toBe(200)
+      expect(webuiTokenUtil.setToken).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the existing browser token valid after migration', async () => {
+      const verifier = await hashPassword(legacyHashPassword(TOKEN))
+      vi.mocked(webuiTokenUtil.getToken).mockReturnValueOnce(TOKEN).mockReturnValueOnce(TOKEN).mockReturnValue(verifier)
+      const app = createAuthApp()
+      app.use('*', authMiddleware)
+      app.get('/test', (c) => c.json({ ok: true }))
+
+      const browserToken = legacyHashPassword(TOKEN)
+      expect((await app.request('/test', { headers: { 'X-Webui-Token': browserToken } })).status).toBe(200)
+      expect((await app.request('/test', { headers: { 'X-Webui-Token': browserToken } })).status).toBe(200)
+      expect((await app.request('/test', { headers: { 'X-Webui-Token': verifier } })).status).toBe(403)
+      expect(webuiTokenUtil.setToken).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not overwrite a password changed while legacy migration is hashing', async () => {
+      const replacement = await hashPassword(legacyHashPassword('new-password'))
+      vi.mocked(webuiTokenUtil.getToken).mockReturnValueOnce(TOKEN).mockReturnValue(replacement)
+      const app = createAuthApp()
+      app.use('*', authMiddleware)
+      app.get('/test', (c) => c.json({ ok: true }))
+
+      await app.request('/test', { headers: { 'X-Webui-Token': legacyHashPassword(TOKEN) } })
+
+      expect(webuiTokenUtil.setToken).not.toHaveBeenCalled()
+      expect(webuiTokenUtil.getToken()).toBe(replacement)
     })
 
     it('returns 403 with wrong token and shows remaining attempts', async () => {
@@ -166,7 +232,7 @@ describe('authMiddleware', () => {
 
       // Even correct token should be rejected
       const res = await app.request('/test', {
-        headers: { 'X-Webui-Token': hashPassword(TOKEN) },
+        headers: { 'X-Webui-Token': legacyHashPassword(TOKEN) },
       })
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -184,7 +250,7 @@ describe('authMiddleware', () => {
 
       // Successful auth resets counter
       const res = await app.request('/test', {
-        headers: { 'X-Webui-Token': hashPassword(TOKEN) },
+        headers: { 'X-Webui-Token': legacyHashPassword(TOKEN) },
       })
       expect(res.status).toBe(200)
 

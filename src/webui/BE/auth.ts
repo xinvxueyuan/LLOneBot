@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs'
 import path from 'path'
 import { LOG_DIR } from '@/common/globalVars'
-import { hashPassword } from './passwordHash'
+import { hashPassword, isEncodedScryptHash, legacyHashPassword, verifyPassword } from './passwordHash'
 import { Context, Next } from 'hono'
 import { webuiTokenUtil } from '../../main/config'
 
@@ -80,8 +80,13 @@ export async function authMiddleware(c: Context, next: Next) {
     }, 403)
   }
 
-  const hashedToken = hashPassword(token)
-  if (reqToken !== hashedToken) {
+  // A legacy plaintext password may itself start with "scrypt$". Only a
+  // strictly valid encoded verifier is treated as the new format.
+  const isScryptToken = isEncodedScryptHash(token)
+  const isValidToken = isScryptToken
+    ? await verifyPassword(reqToken, token)
+    : reqToken === legacyHashPassword(token)
+  if (!isValidToken) {
     globalLoginAttempt.consecutiveFailures++
     globalLoginAttempt.lastAttempt = Date.now()
 
@@ -104,6 +109,16 @@ export async function authMiddleware(c: Context, next: Next) {
       message: `Token校验失败，剩余尝试次数：${remainingAttempts}`,
       remainingAttempts,
     }, 403)
+  }
+
+  // Existing installations stored the plaintext token and expected the
+  // client-side SHA-256 token. Upgrade only after that legacy check succeeds.
+  if (!isScryptToken) {
+    const migratedToken = await hashPassword(reqToken)
+    // Hashing yields to other requests; never overwrite a concurrent reset.
+    if (webuiTokenUtil.getToken() === token) {
+      webuiTokenUtil.setToken(migratedToken)
+    }
   }
 
   // 登录成功，重置失败记录

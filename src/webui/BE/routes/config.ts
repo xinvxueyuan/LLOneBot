@@ -6,6 +6,7 @@ import { Config } from '@/common/types'
 import { isDockerEnvironment } from '@/common/utils/environment'
 import { Hono } from 'hono'
 import { webuiTokenUtil } from '../../../main/config'
+import { hashPassword, legacyHashPassword } from '../passwordHash'
 
 function isListenAllInterfaces(host: string | undefined): boolean {
   return !host || host === '0.0.0.0' || host === '::'
@@ -66,7 +67,9 @@ export function createConfigRoutes(ctx: Context): Hono {
     if (!token) {
       return c.json({ success: false, message: 'Token不能为空' }, 400)
     }
-    webuiTokenUtil.setToken(token)
+    // The browser continues to store SHA-256(token); only the server-side
+    // verifier is upgraded to salted scrypt.
+    webuiTokenUtil.setToken(await hashPassword(legacyHashPassword(token)))
     return c.json({ success: true, message: 'Token设置成功' })
   })
 

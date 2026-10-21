@@ -1,29 +1,27 @@
 import { describe, it, expect } from 'vitest'
-import { hashPassword } from '@/webui/BE/passwordHash'
-import crypto from 'node:crypto'
+import { hashPassword, isEncodedScryptHash, legacyHashPassword, verifyPassword } from '@/webui/BE/passwordHash'
 
-describe('hashPassword', () => {
-  it('returns SHA-256 hex digest', () => {
-    const input = 'my-secret-token'
-    const expected = crypto.createHash('sha256').update(input).digest('hex')
-    expect(hashPassword(input)).toBe(expected)
+describe('passwordHash', () => {
+  it('uses a random salt and verifies the encoded scrypt hash', async () => {
+    const first = await hashPassword('my-secret-token')
+    const second = await hashPassword('my-secret-token')
+
+    expect(first).toMatch(/^scrypt\$16384\$8\$1\$[0-9a-f]+\$[0-9a-f]+$/)
+    expect(second).not.toBe(first)
+    expect(isEncodedScryptHash(first)).toBe(true)
+    expect(await verifyPassword('my-secret-token', first)).toBe(true)
+    expect(await verifyPassword('wrong-token', first)).toBe(false)
   })
 
-  it('returns consistent hash for same input', () => {
-    expect(hashPassword('test')).toBe(hashPassword('test'))
+  it('retains legacy SHA-256 derivation only for migration', () => {
+    expect(legacyHashPassword('my-secret-token')).toHaveLength(64)
+    expect(legacyHashPassword('my-secret-token')).toBe(legacyHashPassword('my-secret-token'))
   })
 
-  it('returns different hashes for different inputs', () => {
-    expect(hashPassword('aaa')).not.toBe(hashPassword('bbb'))
-  })
-
-  it('handles empty string', () => {
-    const expected = crypto.createHash('sha256').update('').digest('hex')
-    expect(hashPassword('')).toBe(expected)
-  })
-
-  it('handles unicode characters', () => {
-    const result = hashPassword('你好世界🌍')
-    expect(result).toHaveLength(64) // SHA-256 hex is 64 chars
+  it('rejects malformed encoded hashes', async () => {
+    expect(await verifyPassword('secret', 'not-a-password-hash')).toBe(false)
+    expect(isEncodedScryptHash('scrypt$999999999$8$1$' + '00'.repeat(16) + '$' + '00'.repeat(64))).toBe(false)
+    expect(await verifyPassword('secret', 'scrypt$16384$8$1$' + 'GG'.repeat(16) + '$' + '00'.repeat(64))).toBe(false)
+    expect(await verifyPassword('secret', 'scrypt$16384$8$1$' + '00'.repeat(16) + '$' + '00'.repeat(63))).toBe(false)
   })
 })
